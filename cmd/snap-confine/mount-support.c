@@ -226,6 +226,7 @@ struct sc_mount_config {
     bool normal_mode;
     const char *base_snap_name;
     const char *snap_instance;
+    const char *emulator_path;  // path to emulator binary for foreign arch snaps
 };
 
 /**
@@ -557,6 +558,42 @@ static void sc_bootstrap_mount_namespace(const struct sc_mount_config *config) {
     // these in advance, make sure paths also exist in the scratch dir.
     sc_create_mount_points(scratch_dir, config->dynamic_mounts);
     sc_do_mounts(scratch_dir, config->dynamic_mounts);
+
+    // Bind mount the emulator binary if configured for foreign architecture emulation.
+    // This makes the emulator (e.g., box64) available inside the snap's mount namespace.
+    if (config->emulator_path != NULL && config->emulator_path[0] != '\0') {
+        char emu_dst[PATH_MAX] = {0};
+        struct stat emu_stat;
+        
+        // Check if emulator exists on the host
+        if (stat(config->emulator_path, &emu_stat) == 0) {
+            // Create destination path inside scratch directory
+            sc_must_snprintf(emu_dst, sizeof emu_dst, "%s%s", scratch_dir, config->emulator_path);
+            
+            // Create parent directories if needed
+            char *last_slash = strrchr(emu_dst, '/');
+            if (last_slash != NULL && last_slash != emu_dst) {
+                *last_slash = '\0';
+                if (!sc_nonfatal_mkpath(emu_dst, 0755, 0, 0)) {
+                    debug("cannot create emulator directory %s", emu_dst);
+                }
+                *last_slash = '/';
+            }
+            
+            // Create the destination file if it doesn't exist
+            int fd = open(emu_dst, O_WRONLY | O_CREAT | O_NOFOLLOW, 0755);
+            if (fd >= 0) {
+                close(fd);
+            }
+            
+            // Bind mount the emulator
+            debug("bind mounting emulator %s -> %s", config->emulator_path, emu_dst);
+            sc_do_mount(config->emulator_path, emu_dst, NULL, MS_BIND, NULL);
+            sc_do_mount("none", emu_dst, NULL, MS_SLAVE, NULL);
+        } else {
+            debug("emulator not found at %s", config->emulator_path);
+        }
+    }
 
     if (config->normal_mode) {
         // Since we mounted /etc from the host filesystem to the scratch
@@ -974,6 +1011,7 @@ void sc_populate_mount_ns(struct sc_apparmor *apparmor, int snap_update_ns_fd, c
             .normal_mode = true,
             .base_snap_name = inv->base_snap_name,
             .snap_instance = inv->snap_instance,
+            .emulator_path = inv->emulator_path,
         };
         sc_bootstrap_mount_namespace(&normal_config);
         sc_free_dynamic_mounts(normal_config.dynamic_mounts);

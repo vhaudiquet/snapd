@@ -42,6 +42,7 @@ typedef struct sc_invocation {
     char **homedirs;
     int num_homedirs;
     bool is_normal_mode;
+    char *emulator_path; /* path to emulator binary for foreign arch snaps */
 } sc_invocation;
 
 /**

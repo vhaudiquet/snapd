@@ -770,10 +770,64 @@ static void sc_get_device_cgroup_setup(const sc_invocation *inv, struct sc_devic
     devsetup->non_strict = sc_streq(non_strict_value, "true");
 }
 
+/* Parse a JSON string value for a given key from a JSON string.
+ * Returns a newly allocated string that must be freed by the caller, or NULL if not found. */
+static char *sc_parse_json_string(const char *json, const char *key) {
+    if (json == NULL || key == NULL) {
+        return NULL;
+    }
+    
+    /* Look for "key": "value" pattern */
+    char pattern[256] = {0};
+    sc_must_snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    
+    const char *pos = strstr(json, pattern);
+    if (pos == NULL) {
+        return NULL;
+    }
+    
+    /* Skip past the key and find the value */
+    pos += strlen(pattern);
+    while (*pos && (*pos == ' ' || *pos == ':' || *pos == '\t')) {
+        pos++;
+    }
+    
+    if (*pos != '"') {
+        return NULL;
+    }
+    pos++;  /* Skip opening quote */
+    
+    /* Find the end of the string value */
+    const char *end = pos;
+    while (*end && *end != '"') {
+        if (*end == '\\') {
+            end++;  /* Skip escaped character */
+        }
+        if (*end) {
+            end++;
+        }
+    }
+    
+    if (*end != '"') {
+        return NULL;
+    }
+    
+    /* Extract the value */
+    size_t len = end - pos;
+    char *value = malloc(len + 1);
+    if (value == NULL) {
+        die("cannot allocate memory");
+    }
+    memcpy(value, pos, len);
+    value[len] = '\0';
+    
+    return value;
+}
+
 /* Read emulation configuration and set SNAP_EMULATION_CONFIG environment variable.
  * The emulation config file contains JSON configuration for the emulator.
  * This is used for running foreign architecture snaps under emulation (e.g., x86_64 on arm64). */
-static void sc_setup_emulation(const sc_invocation *inv) {
+static void sc_setup_emulation(sc_invocation *inv) {
     char info_path[PATH_MAX] = {0};
     sc_must_snprintf(info_path, sizeof info_path, "/var/lib/snapd/emulation/snap.%s.conf", inv->snap_instance);
 
@@ -808,6 +862,13 @@ static void sc_setup_emulation(const sc_invocation *inv) {
     }
 
     if (config != NULL && *config != '\0') {
+        /* Parse the emulator_path from the JSON config */
+        char *emulator_path = sc_parse_json_string(config, "emulator_path");
+        if (emulator_path != NULL) {
+            inv->emulator_path = emulator_path;
+            debug("parsed emulator_path: %s", inv->emulator_path);
+        }
+        
         /* Set the environment variable for snap-exec to read */
         if (setenv("SNAP_EMULATION_CONFIG", config, 1) != 0) {
             die("cannot set SNAP_EMULATION_CONFIG");

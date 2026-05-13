@@ -294,6 +294,9 @@ static void enter_classic_execution_environment(const sc_invocation *inv, gid_t 
 static void enter_non_classic_execution_environment(sc_invocation *inv, struct sc_apparmor *aa, uid_t real_uid,
                                                     gid_t real_gid, gid_t saved_gid);
 
+/* Emulation setup */
+static void sc_setup_emulation(const sc_invocation *inv);
+
 /* Snapd may be packaged with two more capabilities assigned to snap-confine:
  * setuid and setgid. Those capabilities are required to run snap applications
  * on cgroup-v1 systems, due to the additional operations on the freezer

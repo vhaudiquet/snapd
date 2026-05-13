@@ -561,42 +561,26 @@ static void sc_bootstrap_mount_namespace(const struct sc_mount_config *config) {
 
     // Bind mount the emulator binary if configured for foreign architecture emulation.
     // This makes the emulator (e.g., box64) available inside the snap's mount namespace.
+    // We mount to /tmp/snap-emulator to avoid issues with read-only base snap filesystems.
     debug("checking emulator_path: %s", config->emulator_path ? config->emulator_path : "(null)");
     if (config->emulator_path != NULL && config->emulator_path[0] != '\0') {
-        char emu_dst[PATH_MAX] = {0};
         struct stat emu_stat;
         
         debug("attempting to bind mount emulator at %s", config->emulator_path);
         // Check if emulator exists on the host
         if (stat(config->emulator_path, &emu_stat) == 0) {
-            // Create destination path inside scratch directory
-            sc_must_snprintf(emu_dst, sizeof emu_dst, "%s%s", scratch_dir, config->emulator_path);
+            // Create destination in /tmp which is always writable
+            char emu_dst[PATH_MAX] = {0};
+            sc_must_snprintf(emu_dst, sizeof emu_dst, "%s/tmp/snap-emulator", scratch_dir);
             
-            // Create parent directories if needed
-            // We need to create the directory structure inside the scratch dir
-            // e.g., /tmp/snap.rootfs_XXX/usr/bin for emulator at /usr/bin/box64
-            char *last_slash = strrchr(emu_dst, '/');
-            if (last_slash != NULL && last_slash != emu_dst) {
-                *last_slash = '\0';
-                // Create the directory with mkdir -p style
-                // First try to create the directory, ignore EEXIST
-                if (mkdir(emu_dst, 0755) < 0 && errno != EEXIST) {
-                    // If that fails, try creating parent first
-                    char *parent_slash = strrchr(emu_dst, '/');
-                    if (parent_slash != NULL && parent_slash != emu_dst) {
-                        *parent_slash = '\0';
-                        if (mkdir(emu_dst, 0755) < 0 && errno != EEXIST) {
-                            debug("cannot create emulator parent directory %s: %s", emu_dst, strerror(errno));
-                        }
-                        *parent_slash = '/';
-                        // Try again
-                        mkdir(emu_dst, 0755);
-                    }
-                }
-                *last_slash = '/';
+            // Create /tmp directory if needed (should exist but be safe)
+            char tmp_dir[PATH_MAX] = {0};
+            sc_must_snprintf(tmp_dir, sizeof tmp_dir, "%s/tmp", scratch_dir);
+            if (mkdir(tmp_dir, 0755) < 0 && errno != EEXIST) {
+                debug("cannot create tmp directory %s: %s", tmp_dir, strerror(errno));
             }
             
-            // Create the destination file if it doesn't exist
+            // Create the destination file
             int fd = open(emu_dst, O_WRONLY | O_CREAT | O_NOFOLLOW, 0755);
             if (fd >= 0) {
                 close(fd);

@@ -83,9 +83,13 @@ func buildEmulatedCommand(config *emulation.Config, fullCmd []string, commandCha
 		return nil, fmt.Errorf("emulator path not configured")
 	}
 
+	// Inside the snap namespace, the emulator is bind-mounted to /tmp/snap-emulator
+	// This is done by snap-confine to avoid issues with read-only base snap filesystems
+	emulatorPath := "/tmp/snap-emulator"
+
 	// If no command-chain, just prepend the emulator
 	if commandChainLen == 0 {
-		emulatedCmd := []string{config.EmulatorPath}
+		emulatedCmd := []string{emulatorPath}
 		emulatedCmd = append(emulatedCmd, config.Flags...)
 		emulatedCmd = append(emulatedCmd, fullCmd...)
 		return emulatedCmd, nil
@@ -98,7 +102,7 @@ func buildEmulatedCommand(config *emulation.Config, fullCmd []string, commandCha
 	// Build: [command-chain...] [emulator] [emulator-flags] [binary] [args...]
 	emulatedCmd := make([]string, 0, len(fullCmd)+len(config.Flags)+1)
 	emulatedCmd = append(emulatedCmd, commandChain...)
-	emulatedCmd = append(emulatedCmd, config.EmulatorPath)
+	emulatedCmd = append(emulatedCmd, emulatorPath)
 	emulatedCmd = append(emulatedCmd, config.Flags...)
 	emulatedCmd = append(emulatedCmd, restCmd...)
 

@@ -561,10 +561,12 @@ static void sc_bootstrap_mount_namespace(const struct sc_mount_config *config) {
 
     // Bind mount the emulator binary if configured for foreign architecture emulation.
     // This makes the emulator (e.g., box64) available inside the snap's mount namespace.
+    debug("checking emulator_path: %s", config->emulator_path ? config->emulator_path : "(null)");
     if (config->emulator_path != NULL && config->emulator_path[0] != '\0') {
         char emu_dst[PATH_MAX] = {0};
         struct stat emu_stat;
         
+        debug("attempting to bind mount emulator at %s", config->emulator_path);
         // Check if emulator exists on the host
         if (stat(config->emulator_path, &emu_stat) == 0) {
             // Create destination path inside scratch directory

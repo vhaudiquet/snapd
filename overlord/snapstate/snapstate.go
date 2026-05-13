@@ -32,6 +32,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/snapcore/snapd/arch"
 	"github.com/snapcore/snapd/asserts"
 	"github.com/snapcore/snapd/asserts/snapasserts"
 	"github.com/snapcore/snapd/boot"
@@ -51,6 +52,7 @@ import (
 	"github.com/snapcore/snapd/release"
 	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/snap/channel"
+	"github.com/snapcore/snapd/snap/emulation"
 	"github.com/snapcore/snapd/snap/naming"
 	"github.com/snapcore/snapd/snapdenv"
 	"github.com/snapcore/snapd/store"
@@ -881,6 +883,15 @@ func downloadTasks(
 
 	if sar.RedirectChannel != "" {
 		snapsup.Channel = sar.RedirectChannel
+	}
+
+	// Create emulation config if emulation is requested
+	if opts.Flags.Emulate {
+		emulConfig, err := createEmulationConfig(info.Architectures)
+		if err != nil {
+			return nil, nil, err
+		}
+		snapsup.Emulation = emulConfig
 	}
 
 	compsups, err := componentTargetsFromActionResult("download", sar, components)
@@ -4421,6 +4432,43 @@ func unmountSnap(snapst *SnapState) error {
 	}
 
 	return nil
+}
+
+// createEmulationConfig creates an emulation configuration for the given
+// source architectures. It finds an appropriate emulator for the current
+// target architecture.
+func createEmulationConfig(sourceArchs []string) (*emulation.Config, error) {
+	targetArch := arch.DpkgArchitecture()
+
+	// Find the first source architecture that needs emulation
+	for _, sourceArch := range sourceArchs {
+		if sourceArch == "all" || sourceArch == targetArch {
+			continue
+		}
+
+		registry := emulation.GetRegistry()
+		emulatorInfo, ok := registry.GetEmulatorFor(sourceArch, targetArch)
+		if !ok {
+			continue
+		}
+
+		if emulatorInfo.Path == "" {
+			return nil, &emulation.EmulatorNotFoundError{
+				Emulator: emulatorInfo.Type,
+				Reason:   "please install box64 to run x86_64 snaps on this system",
+			}
+		}
+
+		return &emulation.Config{
+			Enabled:      true,
+			Emulator:     emulatorInfo.Type,
+			SourceArch:   sourceArch,
+			TargetArch:   targetArch,
+			EmulatorPath: emulatorInfo.Path,
+		}, nil
+	}
+
+	return nil, fmt.Errorf("cannot find suitable emulator for architectures %v", sourceArchs)
 }
 
 func setupDelayedSecurityBackendEffects(st *state.State, tss []*state.TaskSet, monitoredLanes []int, flags *Flags) []*state.TaskSet {

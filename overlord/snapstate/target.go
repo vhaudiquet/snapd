@@ -313,6 +313,15 @@ func (t *target) setups(st *state.State, opts Options) (SnapSetup, []ComponentSe
 		},
 	}
 
+	// Create emulation config if emulation is enabled
+	if flags.Emulate {
+		emulConfig, err := createEmulationConfig(t.info.Architectures)
+		if err != nil {
+			return SnapSetup{}, nil, err
+		}
+		snapsup.Emulation = emulConfig
+	}
+
 	// TODO until dm-verity data are used for all snaps, we will only
 	// use integrity data for specific snap types (the essential snaps).
 	typ := t.info.Type()

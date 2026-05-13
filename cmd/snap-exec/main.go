@@ -65,9 +65,13 @@ func getEmulationConfig() (*emulation.Config, error) {
 	return &config, nil
 }
 
-// buildEmulatedCommand wraps the command with the emulator prefix.
-// Returns the modified command slice with emulator binary and flags prepended.
-func buildEmulatedCommand(config *emulation.Config, fullCmd []string) ([]string, error) {
+// buildEmulatedCommand inserts the emulator between the command-chain and the
+// actual binary. The command-chain scripts are host-native shell scripts that
+// should not be wrapped with the emulator. Only the actual binary needs emulation.
+//
+// The fullCmd structure is: [command-chain...] [binary] [args...]
+// We need to produce: [command-chain...] [emulator] [emulator-flags] [binary] [args...]
+func buildEmulatedCommand(config *emulation.Config, fullCmd []string, commandChainLen int) ([]string, error) {
 	if config == nil || !config.Enabled {
 		return fullCmd, nil
 	}
@@ -78,10 +82,24 @@ func buildEmulatedCommand(config *emulation.Config, fullCmd []string) ([]string,
 		return nil, fmt.Errorf("cannot get emulator info for %q", config.Emulator)
 	}
 
-	// Build the emulated command: [emulator_path] [emulator_flags...] [original_cmd...]
-	emulatedCmd := []string{config.EmulatorPath}
+	// If no command-chain, just prepend the emulator
+	if commandChainLen == 0 {
+		emulatedCmd := []string{config.EmulatorPath}
+		emulatedCmd = append(emulatedCmd, emulatorInfo.Flags...)
+		emulatedCmd = append(emulatedCmd, fullCmd...)
+		return emulatedCmd, nil
+	}
+
+	// Split the command into command-chain and the rest
+	commandChain := fullCmd[:commandChainLen]
+	restCmd := fullCmd[commandChainLen:]
+
+	// Build: [command-chain...] [emulator] [emulator-flags] [binary] [args...]
+	emulatedCmd := make([]string, 0, len(fullCmd)+len(emulatorInfo.Flags)+1)
+	emulatedCmd = append(emulatedCmd, commandChain...)
+	emulatedCmd = append(emulatedCmd, config.EmulatorPath)
 	emulatedCmd = append(emulatedCmd, emulatorInfo.Flags...)
-	emulatedCmd = append(emulatedCmd, fullCmd...)
+	emulatedCmd = append(emulatedCmd, restCmd...)
 
 	return emulatedCmd, nil
 }
@@ -323,10 +341,11 @@ func execApp(snapTarget, revision, command string, args []string) error {
 	fullCmd = append(fullCmd, cmdArgs...)
 	fullCmd = append(fullCmd, args...)
 
+	commandChainLen := len(app.CommandChain)
 	fullCmd = append(absoluteCommandChain(app.Snap.MountDir(), app.CommandChain), fullCmd...)
 
-	// Wrap command with emulator if emulation is enabled
-	fullCmd, err = buildEmulatedCommand(emulationConfig, fullCmd)
+	// Insert emulator between command-chain and binary if emulation is enabled
+	fullCmd, err = buildEmulatedCommand(emulationConfig, fullCmd, commandChainLen)
 	if err != nil {
 		return fmt.Errorf("cannot build emulated command: %v", err)
 	}
@@ -403,10 +422,11 @@ func execHook(snapTarget string, revision, hookName string) error {
 	hookPath := filepath.Join(mountDir, "meta", "hooks", hookName)
 
 	// run the hook
+	commandChainLen := len(hook.CommandChain)
 	cmd := append(absoluteCommandChain(mountDir, hook.CommandChain), hookPath)
 
-	// Wrap command with emulator if emulation is enabled
-	cmd, err = buildEmulatedCommand(emulationConfig, cmd)
+	// Insert emulator between command-chain and binary if emulation is enabled
+	cmd, err = buildEmulatedCommand(emulationConfig, cmd, commandChainLen)
 	if err != nil {
 		return fmt.Errorf("cannot build emulated command: %v", err)
 	}

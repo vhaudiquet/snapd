@@ -573,11 +573,25 @@ static void sc_bootstrap_mount_namespace(const struct sc_mount_config *config) {
             sc_must_snprintf(emu_dst, sizeof emu_dst, "%s%s", scratch_dir, config->emulator_path);
             
             // Create parent directories if needed
+            // We need to create the directory structure inside the scratch dir
+            // e.g., /tmp/snap.rootfs_XXX/usr/bin for emulator at /usr/bin/box64
             char *last_slash = strrchr(emu_dst, '/');
             if (last_slash != NULL && last_slash != emu_dst) {
                 *last_slash = '\0';
-                if (!sc_nonfatal_mkpath(emu_dst, 0755, 0, 0)) {
-                    debug("cannot create emulator directory %s", emu_dst);
+                // Create the directory with mkdir -p style
+                // First try to create the directory, ignore EEXIST
+                if (mkdir(emu_dst, 0755) < 0 && errno != EEXIST) {
+                    // If that fails, try creating parent first
+                    char *parent_slash = strrchr(emu_dst, '/');
+                    if (parent_slash != NULL && parent_slash != emu_dst) {
+                        *parent_slash = '\0';
+                        if (mkdir(emu_dst, 0755) < 0 && errno != EEXIST) {
+                            debug("cannot create emulator parent directory %s: %s", emu_dst, strerror(errno));
+                        }
+                        *parent_slash = '/';
+                        // Try again
+                        mkdir(emu_dst, 0755);
+                    }
                 }
                 *last_slash = '/';
             }
@@ -586,6 +600,8 @@ static void sc_bootstrap_mount_namespace(const struct sc_mount_config *config) {
             int fd = open(emu_dst, O_WRONLY | O_CREAT | O_NOFOLLOW, 0755);
             if (fd >= 0) {
                 close(fd);
+            } else {
+                debug("cannot create emulator destination file %s: %s", emu_dst, strerror(errno));
             }
             
             // Bind mount the emulator

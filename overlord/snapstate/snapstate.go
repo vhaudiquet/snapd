@@ -4465,6 +4465,8 @@ func createEmulationConfig(sourceArchs []string) (*emulation.Config, error) {
 			SourceArch:   sourceArch,
 			TargetArch:   targetArch,
 			EmulatorPath: emulatorInfo.Path,
+			Flags:        emulatorInfo.Flags,
+			Env:          emulatorInfo.Env,
 		}, nil
 	}
 

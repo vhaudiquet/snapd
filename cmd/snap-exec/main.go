@@ -76,16 +76,17 @@ func buildEmulatedCommand(config *emulation.Config, fullCmd []string, commandCha
 		return fullCmd, nil
 	}
 
-	registry := emulation.GetRegistry()
-	emulatorInfo, ok := registry.Get(config.Emulator)
-	if !ok {
-		return nil, fmt.Errorf("cannot get emulator info for %q", config.Emulator)
+	// Use the emulator path and flags directly from the config, which was
+	// populated during installation time. This avoids needing to detect
+	// the emulator at runtime in snap-exec's restricted environment.
+	if config.EmulatorPath == "" {
+		return nil, fmt.Errorf("emulator path not configured")
 	}
 
 	// If no command-chain, just prepend the emulator
 	if commandChainLen == 0 {
 		emulatedCmd := []string{config.EmulatorPath}
-		emulatedCmd = append(emulatedCmd, emulatorInfo.Flags...)
+		emulatedCmd = append(emulatedCmd, config.Flags...)
 		emulatedCmd = append(emulatedCmd, fullCmd...)
 		return emulatedCmd, nil
 	}
@@ -95,10 +96,10 @@ func buildEmulatedCommand(config *emulation.Config, fullCmd []string, commandCha
 	restCmd := fullCmd[commandChainLen:]
 
 	// Build: [command-chain...] [emulator] [emulator-flags] [binary] [args...]
-	emulatedCmd := make([]string, 0, len(fullCmd)+len(emulatorInfo.Flags)+1)
+	emulatedCmd := make([]string, 0, len(fullCmd)+len(config.Flags)+1)
 	emulatedCmd = append(emulatedCmd, commandChain...)
 	emulatedCmd = append(emulatedCmd, config.EmulatorPath)
-	emulatedCmd = append(emulatedCmd, emulatorInfo.Flags...)
+	emulatedCmd = append(emulatedCmd, config.Flags...)
 	emulatedCmd = append(emulatedCmd, restCmd...)
 
 	return emulatedCmd, nil
@@ -111,14 +112,9 @@ func mergeEmulationEnv(config *emulation.Config, env osutil.Environment) osutil.
 		return env
 	}
 
-	registry := emulation.GetRegistry()
-	emulatorInfo, ok := registry.Get(config.Emulator)
-	if !ok {
-		return env
-	}
-
-	// Add emulator-specific environment variables
-	for k, v := range emulatorInfo.Env {
+	// Add emulator-specific environment variables from the config,
+	// which was populated during installation time.
+	for k, v := range config.Env {
 		// Don't override existing environment variables
 		if _, exists := env[k]; !exists {
 			env[k] = v

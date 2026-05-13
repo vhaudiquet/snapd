@@ -45,6 +45,10 @@ type Config struct {
 	TargetArch string `json:"target_arch"`
 	// EmulatorPath is the path to the emulator binary
 	EmulatorPath string `json:"emulator_path"`
+	// Flags are command-line flags to pass to the emulator
+	Flags []string `json:"flags,omitempty"`
+	// Env contains environment variables to set for emulated execution
+	Env map[string]string `json:"env,omitempty"`
 }
 
 // EmulatorInfo contains information about an available emulator

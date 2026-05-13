@@ -543,6 +543,12 @@ int main(int argc, char **argv) {
         sc_unlock(global_lock_fd);
     }
 
+    // Setup emulation configuration if present. This reads the emulation
+    // config file and sets SNAP_EMULATION_CONFIG environment variable.
+    // This must be done BEFORE entering the execution environment so that
+    // the emulator_path is available for bind-mounting in the mount namespace.
+    sc_setup_emulation(&invocation);
+
     if (invocation.classic_confinement) {
         enter_classic_execution_environment(&invocation, real_gid, saved_gid);
     } else {
@@ -567,10 +573,6 @@ int main(int argc, char **argv) {
     // allows the creation of directories inside ~/ on NFS with root_squash
     // attribute.
     setup_user_data();
-
-    // Setup emulation configuration if present. This reads the emulation
-    // config file and sets SNAP_EMULATION_CONFIG environment variable.
-    sc_setup_emulation(&invocation);
 
     // https://wiki.ubuntu.com/SecurityTeam/Specifications/SnappyConfinement
     sc_maybe_aa_change_onexec(&apparmor, invocation.security_tag);

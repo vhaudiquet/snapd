@@ -285,6 +285,17 @@ func mapLocal(about aboutSnap, sd clientutil.StatusDecorator) *client.Snap {
 		result.Components = fillComponentInfo(about)
 	}
 
+	// Add emulation information if configured
+	if snapst.Emulation != nil && snapst.Emulation.Enabled {
+		result.Emulation = &client.SnapEmulation{
+			Enabled:      snapst.Emulation.Enabled,
+			Emulator:     string(snapst.Emulation.Emulator),
+			SourceArch:   snapst.Emulation.SourceArch,
+			TargetArch:   snapst.Emulation.TargetArch,
+			EmulatorPath: snapst.Emulation.EmulatorPath,
+		}
+	}
+
 	return result
 }
 

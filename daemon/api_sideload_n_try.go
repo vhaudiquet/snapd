@@ -165,7 +165,7 @@ func sideloadOrTrySnap(ctx context.Context, c *Command, body io.ReadCloser, boun
 		form.RemoveAllExcept(pathsToNotRemove)
 	}()
 
-	flags, err := modeFlags(isTrue(form, "devmode"), isTrue(form, "jailmode"), isTrue(form, "classic"))
+	flags, err := modeFlags(isTrue(form, "devmode"), isTrue(form, "jailmode"), isTrue(form, "classic"), isTrue(form, "emulate"))
 	if err != nil {
 		return BadRequest(err.Error())
 	}

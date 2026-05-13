@@ -44,6 +44,7 @@ import (
 	"github.com/snapcore/snapd/sandbox"
 	"github.com/snapcore/snapd/snap"
 	"github.com/snapcore/snapd/snap/channel"
+	"github.com/snapcore/snapd/snap/emulation"
 	"github.com/snapcore/snapd/snap/naming"
 	"github.com/snapcore/snapd/snap/snapdir"
 	"github.com/snapcore/snapd/snapdenv"
@@ -191,6 +192,10 @@ type SnapSetup struct {
 
 	// IntegrityDataInfo contains the integrity data to be used when mounting this snap.
 	IntegrityDataInfo *snap.IntegrityDataInfo `json:"integrity-data-info,omitempty"`
+
+	// Emulation holds the emulation configuration if this snap should run
+	// under emulation (e.g., x86_64 snap on arm64 using box64).
+	Emulation *emulation.Config `json:"emulation,omitempty"`
 }
 
 func (snapsup *SnapSetup) InstanceName() string {
@@ -432,6 +437,10 @@ type SnapState struct {
 
 	// Base indicates the snap's base snap.
 	Base string `json:"base,omitempty"`
+
+	// Emulation holds the emulation configuration if this snap is running
+	// under emulation (e.g., x86_64 snap on arm64 using box64).
+	Emulation *emulation.Config `json:"emulation,omitempty"`
 }
 
 // PendingSecurityState holds information about snaps that have

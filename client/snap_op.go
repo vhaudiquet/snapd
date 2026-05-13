@@ -50,6 +50,7 @@ type SnapOptions struct {
 	DevMode          bool            `json:"devmode,omitempty"`
 	JailMode         bool            `json:"jailmode,omitempty"`
 	Classic          bool            `json:"classic,omitempty"`
+	Emulate          bool            `json:"emulate,omitempty"`
 	Dangerous        bool            `json:"dangerous,omitempty"`
 	IgnoreValidation bool            `json:"ignore-validation,omitempty"`
 	IgnoreRunning    bool            `json:"ignore-running,omitempty"`
@@ -93,6 +94,7 @@ func (opts *SnapOptions) writeModeFields(mw *multipart.Writer) error {
 		{"devmode", opts.DevMode},
 		{"classic", opts.Classic},
 		{"jailmode", opts.JailMode},
+		{"emulate", opts.Emulate},
 		{"dangerous", opts.Dangerous},
 	}
 	return writeFields(mw, fields)

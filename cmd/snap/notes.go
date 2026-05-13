@@ -66,6 +66,7 @@ type Notes struct {
 	Health              string
 	Price               string
 	Held                bool
+	Emulation           bool
 }
 
 func NotesFromChannelSnapInfo(ref *snap.ChannelSnapInfo) *Notes {
@@ -118,6 +119,7 @@ func NotesFromLocal(snp *client.Snap) *Notes {
 		InCohort:            snp.CohortKey != "",
 		Health:              health,
 		Held:                snp.Hold != nil && snp.Hold.After(timeNow()),
+		Emulation:           snp.Emulation != nil && snp.Emulation.Enabled,
 	}
 }
 
@@ -190,6 +192,10 @@ func (n *Notes) String() string {
 
 	if n.Held {
 		ns = append(ns, i18n.G("held"))
+	}
+
+	if n.Emulation {
+		ns = append(ns, i18n.G("emulation"))
 	}
 
 	if len(ns) == 0 {

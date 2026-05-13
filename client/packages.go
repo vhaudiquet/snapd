@@ -97,6 +97,18 @@ type Snap struct {
 
 	// Components is a list of the snap components
 	Components []Component `json:"components,omitempty"`
+
+	// Emulation contains emulation information if the snap is being run under emulation
+	Emulation *SnapEmulation `json:"emulation,omitempty"`
+}
+
+// SnapEmulation holds information about snap emulation settings
+type SnapEmulation struct {
+	Enabled      bool   `json:"enabled"`
+	Emulator     string `json:"emulator,omitempty"`
+	SourceArch   string `json:"source-arch,omitempty"`
+	TargetArch   string `json:"target-arch,omitempty"`
+	EmulatorPath string `json:"emulator-path,omitempty"`
 }
 
 type SnapHealth struct {

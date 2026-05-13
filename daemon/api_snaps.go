@@ -273,6 +273,7 @@ type snapInstruction struct {
 	DevMode                bool                             `json:"devmode"`
 	JailMode               bool                             `json:"jailmode"`
 	Classic                bool                             `json:"classic"`
+	Emulate                bool                             `json:"emulate"`
 	IgnoreValidation       bool                             `json:"ignore-validation"`
 	IgnoreRunning          bool                             `json:"ignore-running"`
 	Unaliased              bool                             `json:"unaliased"`
@@ -317,7 +318,7 @@ func (inst *snapInstruction) revnoOpts() *snapstate.RevisionOptions {
 }
 
 func (inst *snapInstruction) modeFlags() (snapstate.Flags, error) {
-	return modeFlags(inst.DevMode, inst.JailMode, inst.Classic)
+	return modeFlags(inst.DevMode, inst.JailMode, inst.Classic, inst.Emulate)
 }
 
 func (inst *snapInstruction) installFlags() (snapstate.Flags, error) {
@@ -493,7 +494,7 @@ var errClassicDevmodeConflict = errors.New("cannot use classic and devmode flags
 var errUnaliasedPreferConflict = errors.New("cannot use unaliased and prefer flags together")
 var errNoJailMode = errors.New("this system cannot honour the jailmode flag")
 
-func modeFlags(devMode, jailMode, classic bool) (snapstate.Flags, error) {
+func modeFlags(devMode, jailMode, classic, emulate bool) (snapstate.Flags, error) {
 	flags := snapstate.Flags{}
 	devModeOS := sandbox.ForceDevMode()
 	switch {
@@ -510,6 +511,7 @@ func modeFlags(devMode, jailMode, classic bool) (snapstate.Flags, error) {
 	flags.JailMode = jailMode
 	flags.Classic = classic
 	flags.DevMode = devMode
+	flags.Emulate = emulate
 	return flags, nil
 }
 

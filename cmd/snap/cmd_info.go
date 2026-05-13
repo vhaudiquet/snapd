@@ -567,6 +567,29 @@ func (iw *infoWriter) maybePrintNotes() {
 	fmt.Fprintf(iw, "  ignore-validation:\t%t\n", iw.localSnap.IgnoreValidation)
 }
 
+func (iw *infoWriter) maybePrintEmulation() {
+	if !iw.verbose {
+		return
+	}
+	if iw.localSnap == nil {
+		return
+	}
+	if iw.localSnap.Emulation == nil || !iw.localSnap.Emulation.Enabled {
+		return
+	}
+	fmt.Fprintln(iw, "emulation:")
+	fmt.Fprintf(iw, "  enabled:\t%t\n", iw.localSnap.Emulation.Enabled)
+	if iw.localSnap.Emulation.Emulator != "" {
+		fmt.Fprintf(iw, "  emulator:\t%s\n", iw.localSnap.Emulation.Emulator)
+	}
+	if iw.localSnap.Emulation.SourceArch != "" {
+		fmt.Fprintf(iw, "  source-arch:\t%s\n", iw.localSnap.Emulation.SourceArch)
+	}
+	if iw.localSnap.Emulation.TargetArch != "" {
+		fmt.Fprintf(iw, "  target-arch:\t%s\n", iw.localSnap.Emulation.TargetArch)
+	}
+}
+
 func (iw *infoWriter) maybePrintCohortKey() {
 	if !iw.verbose {
 		return
@@ -751,6 +774,7 @@ func (x *infoCmd) Execute([]string) error {
 		iw.maybePrintServices()
 		iw.maybePrintComponents()
 		iw.maybePrintNotes()
+		iw.maybePrintEmulation()
 		// stops the notes etc trying to be aligned with channels
 		iw.Flush()
 		iw.maybePrintType()

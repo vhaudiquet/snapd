@@ -118,6 +118,11 @@ type Flags struct {
 	// setup, making them be applied immediately when the security backend(s)
 	// are being set up.
 	NoDelayedSideEffects bool `json:"no-delayed-effects,omitempty"`
+
+	// Emulate enables emulation for foreign architecture snaps (e.g., x86_64
+	// snaps on arm64/riscv64 using box64). The user must explicitly request
+	// this at install time.
+	Emulate bool `json:"emulate,omitempty"`
 }
 
 // DevModeAllowed returns whether a snap can be installed with devmode

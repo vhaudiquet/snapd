@@ -565,6 +565,10 @@ int main(int argc, char **argv) {
     // attribute.
     setup_user_data();
 
+    // Setup emulation configuration if present. This reads the emulation
+    // config file and sets SNAP_EMULATION_CONFIG environment variable.
+    sc_setup_emulation(&invocation);
+
     // https://wiki.ubuntu.com/SecurityTeam/Specifications/SnappyConfinement
     sc_maybe_aa_change_onexec(&apparmor, invocation.security_tag);
 #ifdef HAVE_SELINUX
@@ -718,6 +722,9 @@ static void enter_classic_execution_environment(const sc_invocation *inv, gid_t 
 /* max wait time for /var/lib/snapd/cgroup/<snap>.devices to appear */
 static const size_t DEVICES_FILE_MAX_WAIT = 120;
 
+/* max wait time for emulation config file to appear */
+static const size_t EMULATION_FILE_MAX_WAIT = 30;
+
 struct sc_device_cgroup_options {
     bool self_managed;
     bool non_strict;
@@ -758,6 +765,52 @@ static void sc_get_device_cgroup_setup(const sc_invocation *inv, struct sc_devic
 
     devsetup->self_managed = sc_streq(self_managed_value, "true");
     devsetup->non_strict = sc_streq(non_strict_value, "true");
+}
+
+/* Read emulation configuration and set SNAP_EMULATION_CONFIG environment variable.
+ * The emulation config file contains JSON configuration for the emulator.
+ * This is used for running foreign architecture snaps under emulation (e.g., x86_64 on arm64). */
+static void sc_setup_emulation(const sc_invocation *inv) {
+    char info_path[PATH_MAX] = {0};
+    sc_must_snprintf(info_path, sizeof info_path, "/var/lib/snapd/emulation/snap.%s.conf", inv->snap_instance);
+
+    /* Check if emulation config exists */
+    struct stat st;
+    if (stat(info_path, &st) != 0) {
+        /* No emulation config, nothing to do */
+        debug("no emulation config at %s", info_path);
+        return;
+    }
+
+    /* Wait for the file to be fully written */
+    if (!sc_wait_for_file(info_path, EMULATION_FILE_MAX_WAIT)) {
+        debug("timeout waiting for emulation config at %s", info_path);
+        return;
+    }
+
+    /* Read the emulation config file */
+    FILE *stream SC_CLEANUP(sc_cleanup_file) = NULL;
+    stream = fopen(info_path, "r");
+    if (stream == NULL) {
+        debug("cannot open emulation config %s: %m", info_path);
+        return;
+    }
+
+    /* Read entire file content */
+    char *config SC_CLEANUP(sc_cleanup_string) = NULL;
+    sc_error *err SC_CLEANUP(sc_cleanup_error) = NULL;
+    if (sc_infofile_get_key(stream, "config", &config, &err) < 0) {
+        debug("cannot read emulation config: %s", err ? err->msg : "unknown error");
+        return;
+    }
+
+    if (config != NULL && *config != '\0') {
+        /* Set the environment variable for snap-exec to read */
+        if (setenv("SNAP_EMULATION_CONFIG", config, 1) != 0) {
+            die("cannot set SNAP_EMULATION_CONFIG");
+        }
+        debug("set emulation config for snap %s", inv->snap_instance);
+    }
 }
 
 static sc_device_cgroup_mode device_cgroup_mode_for_snap(sc_invocation *inv) {

@@ -678,6 +678,7 @@ type modeMixin struct {
 	DevMode  bool `long:"devmode"`
 	JailMode bool `long:"jailmode"`
 	Classic  bool `long:"classic"`
+	Emulate  bool `long:"emulate"`
 }
 
 var modeDescs = mixinDescs{
@@ -687,6 +688,8 @@ var modeDescs = mixinDescs{
 	"devmode": i18n.G("Enable development mode, relaxing confinement for strict snaps or confirming devmode snap installation"),
 	// TRANSLATORS: This should not start with a lowercase letter.
 	"jailmode": i18n.G("Put snap in enforced confinement mode"),
+	// TRANSLATORS: This should not start with a lowercase letter.
+	"emulate": i18n.G("Run foreign architecture snap under emulation (e.g., x86_64 on arm64 using box64)"),
 }
 
 var errModeConflict = errors.New(i18n.G("cannot use devmode and jailmode flags together"))
@@ -699,13 +702,14 @@ func (mx modeMixin) validateMode() error {
 }
 
 func (mx modeMixin) asksForMode() bool {
-	return mx.DevMode || mx.JailMode || mx.Classic
+	return mx.DevMode || mx.JailMode || mx.Classic || mx.Emulate
 }
 
 func (mx modeMixin) setModes(opts *client.SnapOptions) {
 	opts.DevMode = mx.DevMode
 	opts.JailMode = mx.JailMode
 	opts.Classic = mx.Classic
+	opts.Emulate = mx.Emulate
 }
 
 type cmdInstall struct {

@@ -33,6 +33,7 @@ import (
 	"github.com/snapcore/snapd/release"
 	seccomp_compiler "github.com/snapcore/snapd/sandbox/seccomp"
 	"github.com/snapcore/snapd/snap"
+	"github.com/snapcore/snapd/snap/emulation"
 	"github.com/snapcore/snapd/snap/naming"
 	"github.com/snapcore/snapd/snapdtool"
 	"github.com/snapcore/snapd/strutil"
@@ -136,9 +137,24 @@ func validateInfoAndFlags(info *snap.Info, snapst *SnapState, flags Flags) error
 		return err
 	}
 
-	// verify we have a valid architecture
-	if !arch.IsSupportedArchitecture(info.Architectures) {
+	// verify we have a valid architecture (considering emulation if enabled)
+	if !arch.IsSupportedArchitectureWithEmulation(info.Architectures, flags.Emulate) {
+		// Check if emulation would help
+		if arch.CanEmulateArchitectures(info.Architectures) {
+			return &emulation.SnapNeedsEmulationError{
+				Snap:        info.InstanceName(),
+				SourceArchs: info.Architectures,
+				TargetArch:  arch.DpkgArchitecture(),
+			}
+		}
 		return fmt.Errorf("snap %q supported architectures (%s) are incompatible with this system (%s)", info.InstanceName(), strings.Join(info.Architectures, ", "), arch.DpkgArchitecture())
+	}
+
+	// If emulation is requested, validate that the emulator is available
+	if flags.Emulate {
+		if err := validateEmulationSetup(info.Architectures); err != nil {
+			return err
+		}
 	}
 
 	// check assumes
@@ -157,6 +173,40 @@ func validateInfoAndFlags(info *snap.Info, snapst *SnapState, flags Flags) error
 		return err
 	}
 
+	return nil
+}
+
+// validateEmulationSetup checks that emulation is properly configured
+func validateEmulationSetup(architectures []string) error {
+	targetArch := arch.DpkgArchitecture()
+	for _, sourceArch := range architectures {
+		if sourceArch == "all" || sourceArch == targetArch {
+			continue
+		}
+		// Check if we have an emulator for this architecture combination
+		registry := emulation.GetRegistry()
+		if !registry.CanEmulate(sourceArch, targetArch) {
+			return &emulation.EmulationNotSupportedError{
+				SourceArch: sourceArch,
+				TargetArch: targetArch,
+				Available:  emulation.EmulatedArchitectures(targetArch),
+			}
+		}
+		// Check that the emulator binary is actually available
+		info, ok := registry.GetEmulatorFor(sourceArch, targetArch)
+		if !ok {
+			return &emulation.EmulatorNotFoundError{
+				Emulator: emulation.EmulatorBox64,
+				Reason:   "emulator not found in registry",
+			}
+		}
+		if info.Path == "" {
+			return &emulation.EmulatorNotFoundError{
+				Emulator: info.Type,
+				Reason:   "please install box64 to run x86_64 snaps on this system",
+			}
+		}
+	}
 	return nil
 }
 

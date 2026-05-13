@@ -58,6 +58,7 @@ import (
 	apparmor_sandbox "github.com/snapcore/snapd/sandbox/apparmor"
 	"github.com/snapcore/snapd/sandbox/cgroup"
 	"github.com/snapcore/snapd/snap"
+	"github.com/snapcore/snapd/snap/emulation"
 	"github.com/snapcore/snapd/snap/quota"
 	"github.com/snapcore/snapd/snapdenv"
 	"github.com/snapcore/snapd/snapdtool"
@@ -1474,6 +1475,13 @@ func (m *SnapManager) doMountSnap(t *state.Task, _ *tomb.Tomb) error {
 	}
 	st.Unlock()
 
+	// Write emulation configuration if emulation is enabled
+	if snapsup.Flags.Emulate && snapsup.Emulation != nil {
+		if err := writeEmulationConfig(snapsup.InstanceName(), snapsup.Emulation); err != nil {
+			logger.Noticef("Failed to write emulation config for %q: %v", snapsup.InstanceName(), err)
+		}
+	}
+
 	if snapsup.Flags.RemoveSnapPath {
 		if err := os.Remove(snapsup.SnapPath); err != nil {
 			logger.Noticef("Failed to cleanup %s: %s", snapsup.SnapPath, err)
@@ -1538,7 +1546,16 @@ func (m *SnapManager) undoMountSnap(t *state.Task, _ *tomb.Tomb) error {
 
 	// make sure to hold a state lock to prevent conflicts when snaps
 	// sharing the same snap name are being installed/removed,
-	return m.backend.RemoveSnapDir(snapsup.placeInfo(), otherInstances)
+	if err := m.backend.RemoveSnapDir(snapsup.placeInfo(), otherInstances); err != nil {
+		return err
+	}
+
+	// Remove emulation config if present
+	if err := removeEmulationConfig(snapsup.InstanceName()); err != nil {
+		logger.Noticef("Failed to remove emulation config for %q: %v", snapsup.InstanceName(), err)
+	}
+
+	return nil
 }
 
 // queryDisabledServices uses wrappers.QueryDisabledServices()
@@ -5774,5 +5791,50 @@ func (m *SnapManager) undoDiscardOldKernelSnapSetup(t *state.Task, _ *tomb.Tomb)
 	// Make sure we won't be rerun
 	t.SetStatus(state.UndoneStatus)
 
+	return nil
+}
+
+// writeEmulationConfig writes the emulation configuration file for a snap.
+// The configuration is stored in /var/lib/snapd/emulation/snap.<snapname>.conf
+// and contains JSON-encoded emulation settings that snap-confine and snap-exec
+// will read during execution.
+func writeEmulationConfig(instanceName string, config *emulation.Config) error {
+	if config == nil {
+		return nil
+	}
+
+	// Ensure the emulation directory exists
+	emulationDir := filepath.Join(dirs.GlobalRootDir, "/var/lib/snapd/emulation")
+	if err := os.MkdirAll(emulationDir, 0755); err != nil {
+		return fmt.Errorf("cannot create emulation directory: %w", err)
+	}
+
+	// Marshal the config to JSON
+	configJSON, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("cannot marshal emulation config: %w", err)
+	}
+
+	// Write the config file
+	configPath := filepath.Join(emulationDir, fmt.Sprintf("snap.%s.conf", instanceName))
+	if err := osutil.AtomicWriteFile(configPath, configJSON, 0644, 0); err != nil {
+		return fmt.Errorf("cannot write emulation config: %w", err)
+	}
+
+	logger.Debugf("wrote emulation config for %q to %s", instanceName, configPath)
+	return nil
+}
+
+// removeEmulationConfig removes the emulation configuration file for a snap.
+// This should be called when a snap is removed.
+func removeEmulationConfig(instanceName string) error {
+	emulationDir := filepath.Join(dirs.GlobalRootDir, "/var/lib/snapd/emulation")
+	configPath := filepath.Join(emulationDir, fmt.Sprintf("snap.%s.conf", instanceName))
+
+	if err := os.Remove(configPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("cannot remove emulation config: %w", err)
+	}
+
+	logger.Debugf("removed emulation config for %q", instanceName)
 	return nil
 }

@@ -24,6 +24,7 @@ import (
 	"runtime"
 
 	"github.com/snapcore/snapd/osutil"
+	"github.com/snapcore/snapd/snap/emulation"
 )
 
 // ArchitectureType is the type for a supported snappy architecture
@@ -123,11 +124,50 @@ func dpkgArchFromKernelArch(utsMachine string) string {
 // IsSupportedArchitecture returns true if the system architecture is in the
 // list of architectures.
 func IsSupportedArchitecture(architectures []string) bool {
+	return IsSupportedArchitectureWithEmulation(architectures, false)
+}
+
+// IsSupportedArchitectureWithEmulation returns true if the system architecture
+// is in the list of architectures, optionally considering emulation.
+// When allowEmulation is true, architectures that can be emulated are also
+// considered supported.
+func IsSupportedArchitectureWithEmulation(architectures []string, allowEmulation bool) bool {
 	for _, a := range architectures {
 		if a == "all" || a == string(arch) {
 			return true
 		}
+		if allowEmulation {
+			// Check if this architecture can be emulated on the current system
+			if emulation.IsEmulationSupported(a, string(arch)) {
+				return true
+			}
+		}
 	}
 
 	return false
+}
+
+// CanEmulateArchitectures returns true if any of the given architectures
+// can be emulated on the current system.
+func CanEmulateArchitectures(architectures []string) bool {
+	for _, a := range architectures {
+		if a != "all" && a != string(arch) {
+			if emulation.IsEmulationSupported(a, string(arch)) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// EmulatedArchitectures returns the list of architectures that can be
+// emulated on the current system.
+func EmulatedArchitectures() []string {
+	return emulation.EmulatedArchitectures(string(arch))
+}
+
+// GetEmulationConfig returns an emulation configuration for running
+// the given source architecture on the current system.
+func GetEmulationConfig(sourceArch string) (*emulation.Config, error) {
+	return emulation.GetEmulatorConfig(sourceArch, string(arch))
 }

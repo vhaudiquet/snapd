@@ -20,6 +20,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +33,7 @@ import (
 	"github.com/snapcore/snapd/logger"
 	"github.com/snapcore/snapd/osutil"
 	"github.com/snapcore/snapd/snap"
+	"github.com/snapcore/snapd/snap/emulation"
 	"github.com/snapcore/snapd/snap/snapenv"
 
 	// sets up the snap.NewContainerFromDir hook from snapdir
@@ -42,6 +44,71 @@ import (
 var syscallExec = syscall.Exec
 var syscallStat = syscall.Stat
 var osReadlink = os.Readlink
+
+// emulationConfigEnvVar is the environment variable name used to pass
+// emulation configuration from snap-run/snap-confine to snap-exec.
+const emulationConfigEnvVar = "SNAP_EMULATION_CONFIG"
+
+// getEmulationConfig reads the emulation configuration from the environment
+// if present. Returns nil if no emulation is configured.
+func getEmulationConfig() (*emulation.Config, error) {
+	configStr := os.Getenv(emulationConfigEnvVar)
+	if configStr == "" {
+		return nil, nil
+	}
+
+	var config emulation.Config
+	if err := json.Unmarshal([]byte(configStr), &config); err != nil {
+		return nil, fmt.Errorf("cannot parse emulation config: %v", err)
+	}
+
+	return &config, nil
+}
+
+// buildEmulatedCommand wraps the command with the emulator prefix.
+// Returns the modified command slice with emulator binary and flags prepended.
+func buildEmulatedCommand(config *emulation.Config, fullCmd []string) ([]string, error) {
+	if config == nil || !config.Enabled {
+		return fullCmd, nil
+	}
+
+	registry := emulation.GetRegistry()
+	emulatorInfo, ok := registry.Get(config.Emulator)
+	if !ok {
+		return nil, fmt.Errorf("cannot get emulator info for %q", config.Emulator)
+	}
+
+	// Build the emulated command: [emulator_path] [emulator_flags...] [original_cmd...]
+	emulatedCmd := []string{config.EmulatorPath}
+	emulatedCmd = append(emulatedCmd, emulatorInfo.Flags...)
+	emulatedCmd = append(emulatedCmd, fullCmd...)
+
+	return emulatedCmd, nil
+}
+
+// mergeEmulationEnv adds emulator-specific environment variables to the
+// execution environment.
+func mergeEmulationEnv(config *emulation.Config, env osutil.Environment) osutil.Environment {
+	if config == nil || !config.Enabled {
+		return env
+	}
+
+	registry := emulation.GetRegistry()
+	emulatorInfo, ok := registry.Get(config.Emulator)
+	if !ok {
+		return env
+	}
+
+	// Add emulator-specific environment variables
+	for k, v := range emulatorInfo.Env {
+		// Don't override existing environment variables
+		if _, exists := env[k]; !exists {
+			env[k] = v
+		}
+	}
+
+	return env
+}
 
 // commandline args
 var opts struct {
@@ -217,6 +284,15 @@ func execApp(snapTarget, revision, command string, args []string) error {
 		env["CUPS_SERVER"] = "/var/cups/cups.sock"
 	}
 
+	// Check for emulation configuration
+	emulationConfig, err := getEmulationConfig()
+	if err != nil {
+		return fmt.Errorf("cannot get emulation config: %v", err)
+	}
+
+	// Add emulator-specific environment variables if emulation is enabled
+	env = mergeEmulationEnv(emulationConfig, env)
+
 	// strings.Split() is ok here because we validate all app fields and the
 	// whitelist is pretty strict (see snap/validate.go:appContentWhitelist)
 	// (see also overlord/snapstate/check_snap.go's normPath)
@@ -248,6 +324,12 @@ func execApp(snapTarget, revision, command string, args []string) error {
 	fullCmd = append(fullCmd, args...)
 
 	fullCmd = append(absoluteCommandChain(app.Snap.MountDir(), app.CommandChain), fullCmd...)
+
+	// Wrap command with emulator if emulation is enabled
+	fullCmd, err = buildEmulatedCommand(emulationConfig, fullCmd)
+	if err != nil {
+		return fmt.Errorf("cannot build emulated command: %v", err)
+	}
 
 	logger.StartupStageTimestamp("snap-exec to app")
 	if err := syscallExec(fullCmd[0], fullCmd, env.ForExec()); err != nil {
@@ -309,9 +391,25 @@ func execHook(snapTarget string, revision, hookName string) error {
 		env.ExtendWithExpanded(eenv)
 	}
 
+	// Check for emulation configuration
+	emulationConfig, err := getEmulationConfig()
+	if err != nil {
+		return fmt.Errorf("cannot get emulation config: %v", err)
+	}
+
+	// Add emulator-specific environment variables if emulation is enabled
+	env = mergeEmulationEnv(emulationConfig, env)
+
 	hookPath := filepath.Join(mountDir, "meta", "hooks", hookName)
 
 	// run the hook
 	cmd := append(absoluteCommandChain(mountDir, hook.CommandChain), hookPath)
+
+	// Wrap command with emulator if emulation is enabled
+	cmd, err = buildEmulatedCommand(emulationConfig, cmd)
+	if err != nil {
+		return fmt.Errorf("cannot build emulated command: %v", err)
+	}
+
 	return syscallExec(cmd[0], cmd, env.ForExec())
 }

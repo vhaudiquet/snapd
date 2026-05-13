@@ -295,7 +295,7 @@ static void enter_non_classic_execution_environment(sc_invocation *inv, struct s
                                                     gid_t real_gid, gid_t saved_gid);
 
 /* Emulation setup */
-static void sc_setup_emulation(const sc_invocation *inv);
+static void sc_setup_emulation(sc_invocation *inv);
 
 /* Snapd may be packaged with two more capabilities assigned to snap-confine:
  * setuid and setgid. Those capabilities are required to run snap applications

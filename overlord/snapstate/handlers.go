@@ -20,6 +20,7 @@
 package snapstate
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -5798,6 +5799,7 @@ func (m *SnapManager) undoDiscardOldKernelSnapSetup(t *state.Task, _ *tomb.Tomb)
 // The configuration is stored in /var/lib/snapd/emulation/snap.<snapname>.conf
 // and contains JSON-encoded emulation settings that snap-confine and snap-exec
 // will read during execution.
+// The file format is: config=<json>
 func writeEmulationConfig(instanceName string, config *emulation.Config) error {
 	if config == nil {
 		return nil
@@ -5815,9 +5817,15 @@ func writeEmulationConfig(instanceName string, config *emulation.Config) error {
 		return fmt.Errorf("cannot marshal emulation config: %w", err)
 	}
 
+	// Write the config file in key=value format expected by snap-confine
+	var buf bytes.Buffer
+	buf.WriteString("config=")
+	buf.Write(configJSON)
+	buf.WriteString("\n")
+
 	// Write the config file
 	configPath := filepath.Join(emulationDir, fmt.Sprintf("snap.%s.conf", instanceName))
-	if err := osutil.AtomicWriteFile(configPath, configJSON, 0644, 0); err != nil {
+	if err := osutil.AtomicWriteFile(configPath, buf.Bytes(), 0644, 0); err != nil {
 		return fmt.Errorf("cannot write emulation config: %w", err)
 	}
 

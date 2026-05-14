@@ -34,6 +34,14 @@ var box64SourceArchs = []string{"amd64"}
 // box64TargetArchs are the architectures box64 can run on
 var box64TargetArchs = []string{"arm64", "riscv64"}
 
+// Box64SnapName is the name of the box64 snap package
+const Box64SnapName = "box64-with-gl4es" // "box64"
+
+// Box64SnapPath is the path to box64 when installed as a snap
+// This path is accessible from inside any snap's namespace because
+// /snap is bind-mounted into every snap's mount namespace
+const Box64SnapPath = "/snap/box64-with-gl4es/current/usr/bin/box64" //"/snap/box64/current/usr/bin/box64"
+
 // detectBox64 checks if box64 is available on the system
 func detectBox64() (*EmulatorInfo, error) {
 	// First check if we're on a supported target architecture

@@ -887,11 +887,31 @@ func downloadTasks(
 
 	// Create emulation config if emulation is requested
 	if opts.Flags.Emulate {
-		emulConfig, err := createEmulationConfig(info.Architectures)
+		emulConfig, emulatorSnap, err := createEmulationConfig(info.Architectures)
 		if err != nil {
 			return nil, nil, err
 		}
 		snapsup.Emulation = emulConfig
+
+		// Add the emulator snap as a prerequisite if not already present
+		if emulatorSnap != "" {
+			// Check if emulator is already in prerequisites
+			found := false
+			for _, p := range snapsup.Prereq {
+				if p == emulatorSnap {
+					found = true
+					break
+				}
+			}
+			if !found {
+				snapsup.Prereq = append(snapsup.Prereq, emulatorSnap)
+				if snapsup.PrereqContentAttrs == nil {
+					snapsup.PrereqContentAttrs = make(map[string][]string)
+				}
+				// Emulator snap doesn't need content attrs
+				snapsup.PrereqContentAttrs[emulatorSnap] = nil
+			}
+		}
 	}
 
 	compsups, err := componentTargetsFromActionResult("download", sar, components)
@@ -4436,8 +4456,10 @@ func unmountSnap(snapst *SnapState) error {
 
 // createEmulationConfig creates an emulation configuration for the given
 // source architectures. It finds an appropriate emulator for the current
-// target architecture.
-func createEmulationConfig(sourceArchs []string) (*emulation.Config, error) {
+// target architecture and returns the emulator snap name as a prerequisite.
+// The emulator is expected to be installed as a snap, and the path will be
+// accessible from inside any snap's namespace via /snap/<emulator>/current/...
+func createEmulationConfig(sourceArchs []string) (*emulation.Config, string, error) {
 	targetArch := arch.DpkgArchitecture()
 
 	// Find the first source architecture that needs emulation
@@ -4446,17 +4468,20 @@ func createEmulationConfig(sourceArchs []string) (*emulation.Config, error) {
 			continue
 		}
 
-		registry := emulation.GetRegistry()
-		emulatorInfo, ok := registry.GetEmulatorFor(sourceArch, targetArch)
+		// Use snap-based emulator path - the emulator snap will be installed
+		// as a prerequisite and will be accessible at /snap/<emulator>/current/...
+		emulatorInfo, ok := emulation.GetSnapBasedEmulatorFor(sourceArch, targetArch)
 		if !ok {
 			continue
 		}
 
-		if emulatorInfo.Path == "" {
-			return nil, &emulation.EmulatorNotFoundError{
-				Emulator: emulatorInfo.Type,
-				Reason:   "please install box64 to run x86_64 snaps on this system",
-			}
+		// Determine the emulator snap name based on the emulator type
+		var emulatorSnapName string
+		switch emulatorInfo.Type {
+		case emulation.EmulatorBox64:
+			emulatorSnapName = emulation.Box64SnapName
+		default:
+			return nil, "", fmt.Errorf("unknown emulator type: %s", emulatorInfo.Type)
 		}
 
 		return &emulation.Config{
@@ -4467,10 +4492,10 @@ func createEmulationConfig(sourceArchs []string) (*emulation.Config, error) {
 			EmulatorPath: emulatorInfo.Path,
 			Flags:        emulatorInfo.Flags,
 			Env:          emulatorInfo.Env,
-		}, nil
+		}, emulatorSnapName, nil
 	}
 
-	return nil, fmt.Errorf("cannot find suitable emulator for architectures %v", sourceArchs)
+	return nil, "", fmt.Errorf("cannot find suitable emulator for architectures %v", sourceArchs)
 }
 
 func setupDelayedSecurityBackendEffects(st *state.State, tss []*state.TaskSet, monitoredLanes []int, flags *Flags) []*state.TaskSet {

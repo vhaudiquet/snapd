@@ -170,6 +170,47 @@ func GetEmulatorConfig(sourceArch, targetArch string) (*Config, error) {
 	}, nil
 }
 
+// GetSnapBasedEmulatorInfo returns emulator info using snap paths.
+// This is used when the emulator is installed as a snap dependency.
+// The returned path will be accessible from inside any snap's namespace
+// because /snap is bind-mounted into every snap's mount namespace.
+func GetSnapBasedEmulatorInfo(emulatorType EmulatorType, targetArch string) (*EmulatorInfo, error) {
+	switch emulatorType {
+	case EmulatorBox64:
+		// Check if box64 supports this target architecture
+		if !contains(box64TargetArchs, targetArch) {
+			return nil, fmt.Errorf("box64 does not support target architecture %s", targetArch)
+		}
+		return &EmulatorInfo{
+			Type:        EmulatorBox64,
+			Path:        Box64SnapPath,
+			SourceArchs: box64SourceArchs,
+			TargetArchs: box64TargetArchs,
+			Flags:       Box64Flags(),
+			Env:         Box64Env(),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown emulator type: %s", emulatorType)
+	}
+}
+
+// GetSnapBasedEmulatorFor returns an emulator that can handle the given architecture translation,
+// using snap paths for the emulator binary.
+func GetSnapBasedEmulatorFor(sourceArch, targetArch string) (*EmulatorInfo, bool) {
+	// Check if box64 can handle this architecture translation
+	if contains(box64SourceArchs, sourceArch) && contains(box64TargetArchs, targetArch) {
+		return &EmulatorInfo{
+			Type:        EmulatorBox64,
+			Path:        Box64SnapPath,
+			SourceArchs: box64SourceArchs,
+			TargetArchs: box64TargetArchs,
+			Flags:       Box64Flags(),
+			Env:         Box64Env(),
+		}, true
+	}
+	return nil, false
+}
+
 // EmulatedArchitectures returns the list of architectures that can be emulated
 // on the given target architecture
 func EmulatedArchitectures(targetArch string) []string {

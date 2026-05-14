@@ -315,11 +315,32 @@ func (t *target) setups(st *state.State, opts Options) (SnapSetup, []ComponentSe
 
 	// Create emulation config if emulation is enabled
 	if flags.Emulate {
-		emulConfig, err := createEmulationConfig(t.info.Architectures)
+		emulConfig, emulatorSnap, err := createEmulationConfig(t.info.Architectures)
 		if err != nil {
 			return SnapSetup{}, nil, err
 		}
 		snapsup.Emulation = emulConfig
+
+		// Add the emulator snap as a prerequisite if not already present
+		// and not already installed on the system
+		if emulatorSnap != "" {
+			// Check if emulator is already in prerequisites
+			found := false
+			for _, p := range snapsup.Prereq {
+				if p == emulatorSnap {
+					found = true
+					break
+				}
+			}
+			if !found {
+				snapsup.Prereq = append(snapsup.Prereq, emulatorSnap)
+				if snapsup.PrereqContentAttrs == nil {
+					snapsup.PrereqContentAttrs = make(map[string][]string)
+				}
+				// Emulator snap doesn't need content attrs
+				snapsup.PrereqContentAttrs[emulatorSnap] = nil
+			}
+		}
 	}
 
 	// TODO until dm-verity data are used for all snaps, we will only
